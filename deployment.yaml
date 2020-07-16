@@ -1,0 +1,78 @@
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: app
+  name: app
+spec:
+  clusterIP: None
+  ports:
+    - port: 8000
+      protocol: TCP
+  selector:
+    app: app
+  type: ClusterIP
+
+---
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  name: app
+spec:
+  selector:
+    matchLabels:
+      app: app
+  replicas: 3
+  template:
+    metadata:
+      labels:
+      # __VARIABLE__ will be changed by CI
+        app: __APP__
+        user: __USER__
+        pipeline_url: __PIPELINE_URL__
+        sha: __COMMIT_URL__
+    spec:
+      initContainers:
+        - name: init-sysctl
+          image: busybox
+          command:
+          - /bin/sh
+          - -c
+          - |
+            sysctl -w net.core.somaxconn=1024
+          securityContext:
+            privileged: true
+      containers:
+      - name: api
+        image: example.registry/app:2.5
+        command: ['/bin/bash', '-c', 'entrypoint']
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "4"
+            memory: "4Gi"
+        volumeMounts:
+        - mountPath: /app/static
+          name: static
+        env:
+          - name: OPTION_A
+            value: "True"
+          - name: OPTION_B
+            value: "False"
+      imagePullSecrets:
+      - name: registry-credentials
+      volumes:
+      - name: static
+        emptyDir: {}
